@@ -1,0 +1,174 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<meta charset="utf-8" />
+		<title>Generic Hypermedia Client Concept</title>
+		<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+		
+		<!-- Github json converter -->
+		<!-- This is what Github should provide as a link for the client to GET and be able to normalize the structure -->
+		<script type="text/javascript">
+			function convertGithubJson(data) {
+				//*****
+				var result = {};
+				result.data = {};
+				result.embeddedLinks = {};
+				result.outboundLinks = {};
+				result.templatedQueries = {};
+
+				//***** Object
+				if (data.length == undefined) {
+					for (var key in data) {
+						//***** Outbound links and Templated queries;
+						//***** https://developer.github.com/v3/#hypermedia
+						if (key.match(/_url$/gi)) {
+							//*****
+							var value = data[key];
+
+							//***** Determine H-factor value type;
+							if (value.toString().match(/(png|jpg|gif)/gi))
+								result.embeddedLinks[key] = value;
+							if (value.match(/{/gi) && value.match(/}/gi))
+								result.templatedQueries[key] = value;
+							else
+								result.outboundLinks[key] = value;
+						}
+						//***** Embedding links;
+						else if (data[key].toString().match(/(png|jpg|gif)/gi)) {
+							result.embeddedLinks[key] = data[key];
+						}
+						//***** Otherwise it's data;
+						else {
+							result.data[key] = data[key];
+						}
+					}
+				}
+				//***** Array;
+				else {
+
+				}
+
+				//*****
+				return result;
+			}
+		</script>
+
+		<!-- Client Representation Presentation -->
+		<!-- Html based approach. Only read the hypermedia factors supported by html -->
+		<script type="text/javascript">
+			function isObject(obj) {
+				for (var p in obj) { return true; }
+				return false;
+			}
+
+			function isArray(obj) {
+				if (Object.prototype.toString.call(obj) === '[object Array]') {
+					alert('Array!');
+				}
+			}
+
+			function showRepresentationHtml(representation) {
+				var html;
+
+				//***** Show data;
+				$("#data").html("Nothing found");
+				if (isObject(representation.data)) {
+					html = "<table><tr><th>Property</th><th>Value</th></tr>";
+					for (var item in representation.data) {
+						html += "<tr>";
+						html += "<td>" + item + "</td><td>" + representation.data[item] + "</td>";
+						html += "</tr>";
+					}
+					html += "</table>";
+					$("#data").html(html);
+				}
+
+				//***** Show embedded links;
+				$("#embeddedLinks").html("Nothing found");
+				if (isObject(representation.embeddedLinks)) {
+					html = "<ul>";
+					for (var keyle in representation.embeddedLinks) {
+						html += "<li>" + keyle + ": <img src=\"" + representation.embeddedLinks[keyle] + "\" title=\"" + keyle + "\"/></li>";
+					}
+					html += "</ul>";
+					$("#embeddedLinks").html(html);
+				}
+
+				//***** Show outbound links;
+				$("#outboundLinks").html("Nothing found");
+				if (isObject(representation.outboundLinks)) {
+					html = "<ul>";
+					for (var keylo in representation.outboundLinks) {
+						//***** Set uri input to fake navigation in api;
+						//***** html += "<li><a href=\"" + representation.outboundLinks[keylo] + "\">" + keylo + "</a></li>";
+						html += "<li><a href=\"#\" onclick=\"javascript:explore('" + representation.outboundLinks[keylo] + "');return false;\" title=\"" + representation.outboundLinks[keylo] + "\">" + keylo + "</a></li>";
+					}
+					html += "</ul>";
+					$("#outboundLinks").html(html);
+				}
+
+				//***** Show templated queries;
+				$("#templatedQueries").html("Nothing found");
+				if (isObject(representation.templatedQueries)) {
+					html = "<ul>";
+					for (var keylt in representation.templatedQueries) {
+						html += "<li><a href=\"" + representation.templatedQueries[keylt] + "\">" + keylt + "</a></li>";
+					}
+					html += "</ul>";
+					$("#templatedQueries").html(html);
+				}
+			}
+			
+			//***** Calls a uri and handles the response;
+			function explore(uriToExplore) {
+				var previousUrl = $("#rooturi").val();
+				if (uriToExplore != undefined && uriToExplore != "") $("#rooturi").val(uriToExplore);
+				var uri = $("#rooturi").val();
+				$.ajax({
+					type: "GET",
+					url: uri,
+
+					headers: {
+						"Authorization": "Basic " + $("#basicauth").val()
+					},
+
+					success : function(data, textStatus, request) {
+						var html = "<span style=\"color:darkgreen\">Success (" + textStatus + ")</span>";
+						html += " <a onclick=\"explore('" + previousUrl + "');return false;\" href=\"#\" title=\"" + previousUrl + "\">Return to previous resource</a>";
+						$("#general").html(html);
+
+						var representation = convertGithubJson(data);
+						showRepresentationHtml(representation);
+					},
+					error: function(request, textStatus, errorThrown) {
+						var html = "<span style=\"color:orangered\">" + errorThrown + " (" + textStatus + ")</span>";
+						html += " <a onclick=\"explore('" + previousUrl + "');return false;\" href=\"#\" title=\"" + previousUrl + "\">Return to previous resource</a>";
+
+						$("#general").html(html);
+					}
+				});
+			}
+
+		</script>
+	</head>
+	<body>
+		<h1>H-Factor Hypermedia Client</h1>
+		<form action="client.html" method="get">
+			<label for="rooturi">Uri:</label> <input type="text" name="rooturi" id="rooturi" value="https://api.github.com/" size="60" />
+			<label for="basicauth">Basic auth:</label> <input type="text" name="basicauth" id="basicauth" value="" size="60"/>
+			<button type="button" onclick="javascript:explore();return false;">Explore</button>
+		</form>
+		<p id="general">Please press &quot;Explore&quot; to start exploring</p>
+		<p>&nbsp;</p>
+		<p><strong>Data</strong></p>
+		<div id="data">Nothing found</div>
+		<p><strong>[LE] Embedding links</strong></p>
+		<div id="embeddedLinks">Nothing found</div>
+		<p><strong>[LO] Outbound links</strong></p>
+		<div id="outboundLinks">Nothing found</div>
+		<p><strong>[LT] Templated queries</strong></p>
+		<p><em>This will require an UriTemplate parser. Not implemented for now.</em></p>
+		<div id="templatedQueries">Nothing found</div>
+	</body>
+</html>
